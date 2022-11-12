@@ -9,6 +9,8 @@
 
 /* globals */
 
+int interval = 1000;
+
 #define PROC_CPU  "/proc/stat"
 #define PROC_SOFTIRQ "/proc/softirqs"
 #define PROC_INTERRUPTS "/proc/interrupts"
@@ -20,15 +22,16 @@
 #define C_END   "m"
 #define C_RESET "[0m"
 
-#define VERSION 1.2
+#define VERSION 1.3
 
 #define max_colors 16
 //                           0     1     2     3     4     5     6     7     8     9     a     b     c     d     e     f 
+char *cpu_temp_scale[] = { "16", "52", "88","124","160","196","202","208","214","220","221","226","228","229","231","255"};
+char *cpui_temp_scale[] ={"255","231","229","228","226","221","220","214","208","202","196","160","124", "88", "52", "16"};
 char *bgy_scale[] =      { "17", "21", "32", "37", "43", "40", "47", "82","118","156","154","190","226","228","230", "15"};
 char *red_temp_scale[] = { "16", "52", "88","124","160","196","202","208","214","220","221","226","228","229","231","255"};
 char *rbw_scale[] =      { "52","124","196","166","208","214","226","155", "83", "46", "49", "51", "45","111","147","201"};
 char *mono_scale[] =     {"233","235","236","238","240","242","244","246","247","249","250","252","253","254","255","231"};
-//char *colors[] = { "17", "19", "20", "32", "37", "40", "46", "82", "156", "201", "213", "196", "202", "214", "226", "15"};
 
 char **colors;
 
@@ -52,7 +55,8 @@ struct line_struct {
 #define LINE_THREAD 2
 #define LINE_CPUID1 3
 #define LINE_CPUID2 4
-#define LINE_COUNT  5
+#define LINE_CPUID3 5
+#define LINE_COUNT  6
 
 struct header_struct {
      struct line_struct line[LINE_COUNT];
@@ -104,8 +108,8 @@ void usage(char *argv[])
 {
      int i;
      
-     printf("usage: %s -C | -S <label> | -I <label> [-i interval] [-t duration]\n",argv[0]);
-     printf("usage: interval, duration in seconds. interval default is 1, duration is unlimited\n\n");
+     printf("usage: %s -C | -S <label> | -I <label> [-i interval msec] [-t duration sec]\n",argv[0]);
+     printf("usage: interval, duration in miliseconds. interval default is 1000, duration is in seconds, default unlimited\n\n");
      printf("usage: -C <label> Show cpu time for user,nice,sys,idle,wio,irq,softirq. See note below.\n");
      printf("                  the label 'all' will show the sum of user,nice,sys,wio,irq,softirq\n");
      printf("usage: -S <label> Show the SOFTIRQ vector corresponding with that label, e.g. SCHED, NET_RX\n");
@@ -115,12 +119,11 @@ void usage(char *argv[])
      printf("usage: -Z <string> Choose a color scale: bgy (blue green yellow, default), red (red temperature scale for loren acton), rbw (rainbow, long to short wavelengths)\n\n");
      printf("Version %f, Limits: max_metrics=%d, max_cpus=%d, clock tick ms=%d\n\n",VERSION, MAX_METRICS, MAX_CPUS,topology.clock_tick_ms);
      printf("CPU time. This is taken from the jiffies from /proc/stat. Its then scaled up to milliseconds using _SC_CLK_TCK.\n");
-     printf("\tThis means that 100%% cpu is 1000ms per second. This displays as the number 'a'\n");
-     printf("Scale is log2. So '9' is a delta of 2^9 (or 1<<9) per interval\n\n");
      printf("Colours and scales\n");
-     printf("\tbgy\tred\trbw\tmono\tscale\n");
+     printf("\tcpu\tcpui scale |\tbgy\tred\trbw\tmono\tscale\n");
      for (i=0;i<max_colors;i++) {
-	  printf("\t%s%s%s%x%s\t%s%s%s%x%s\t%s%s%s%x%s\t%s%s%s%x%s - 2^%d or %d\n",C_START,bgy_scale[i],C_END,i,C_RESET,C_START,red_temp_scale[i],C_END,i,C_RESET,C_START,rbw_scale[i],C_END,i,C_RESET,C_START,mono_scale[i],C_END,i,C_RESET,i,(1<<i));
+         printf("\t%s%s%s%x%s\t%s%s%s%x%s %8d |\t%s%s%s%x%s\t%s%s%s%x%s\t%s%s%s%x%s\t%s%s%s%x%s - 2^%d or %d\n",C_START,cpu_temp_scale[i],C_END,i,C_RESET,C_START,cpui_temp_scale[i],C_END,i,C_RESET,i*interval/max_colors,C_START,bgy_scale[i],C_END,i,C_RESET,C_START,red_temp_scale[i],C_END,i,C_RESET,C_START,rbw_scale[i],C_END,i,C_RESET,C_START,mono_scale[i],C_END,i,C_RESET,i,(1<<i));
+// printf("\t%s%s%s%x%s\t%s%s%s%x%s\t%d\t%s%s%s%x%s\t%s%s%s%x%s\t%s%s%s%x%s\t%s%s%s%x%s - 2^%d or %d\n",C_START,cpu_temp_scale[i],C_END,i,C_RESET,C_START,cpui_temp_scale[i],C_END,i*interval/max_colors,C_RESET,C_START,bgy_scale[i],C_END,i,C_RESET,C_START,red_temp_scale[i],C_END,i,C_RESET,C_START,rbw_scale[i],C_END,i,C_RESET,C_START,mono_scale[i],C_END,i,C_RESET,i,(1<<i));//           ,i,interval,(1<<i));
      }
      
      exit(0);
@@ -377,10 +380,11 @@ void init_header()
      memset((void *)&header,0,sizeof(header));
 
      sprintf(header.line[LINE_METRIC].buffer,"%-10s","Metric");
-     sprintf(header.line[LINE_SOCKET].buffer,"%-10s","Socket");
+     sprintf(header.line[LINE_SOCKET].buffer,"%-10s","NUMA Node");
      sprintf(header.line[LINE_THREAD].buffer,"%-10s","Thread");
      sprintf(header.line[LINE_CPUID1].buffer,"%-10s","Cpu");
      sprintf(header.line[LINE_CPUID2].buffer,"%-10s","   ");
+     sprintf(header.line[LINE_CPUID3].buffer,"%-10s","   ");
      
      offset=10; // offset from start. 
      for (i=0;i<LINE_COUNT;i++) header.line[i].cursor = 10;
@@ -404,12 +408,16 @@ void init_header()
 			 int cpuid = topology.map[s].threads[t].cores[c].cpu_id;
 			 
 			 while (header.line[LINE_CPUID1].cursor < offset) header.line[LINE_CPUID1].buffer[header.line[LINE_CPUID1].cursor++]=' ';
-			 sprintf(&header.line[LINE_CPUID1].buffer[header.line[LINE_CPUID1].cursor],"%1.1d",(cpuid/10));
+			 sprintf(&header.line[LINE_CPUID1].buffer[header.line[LINE_CPUID1].cursor],"%1.1d",(cpuid/100));
 			 header.line[LINE_CPUID1].cursor++;
-			 
+
 			 while (header.line[LINE_CPUID2].cursor < offset) header.line[LINE_CPUID2].buffer[header.line[LINE_CPUID2].cursor++]=' ';
-			 sprintf(&header.line[LINE_CPUID2].buffer[header.line[LINE_CPUID2].cursor],"%1.1d",(cpuid%10));
+			 sprintf(&header.line[LINE_CPUID2].buffer[header.line[LINE_CPUID2].cursor],"%1.1d",(cpuid%100/10));
 			 header.line[LINE_CPUID2].cursor++;
+			 
+			 while (header.line[LINE_CPUID3].cursor < offset) header.line[LINE_CPUID3].buffer[header.line[LINE_CPUID3].cursor++]=' ';
+			 sprintf(&header.line[LINE_CPUID3].buffer[header.line[LINE_CPUID3].cursor],"%1.1d",(cpuid%10));
+			 header.line[LINE_CPUID3].cursor++;
 			 
 			 offset++;
 		    }
@@ -449,7 +457,10 @@ void display_metric_heatmap(time_t now, int interval_count)
 			 int delta = metrics[m].current[cpuid] - metrics[m].previous[cpuid];
 			 int value;
 			 
-			 value = shift_log2(delta);
+                         if (colors == cpui_temp_scale || colors == cpu_temp_scale)
+                             value = (delta/(interval/max_colors));
+                         else
+			     value = shift_log2(delta);
 			 sum+=value;
 			 if (value >= max_colors) value=max_colors - 1;
 			 fprintf(stdout,"%s%s%s%x",C_START,colors[value],C_END,value);
@@ -483,10 +494,10 @@ int main(int argc,char *argv[])
      
      time_t now,start,end;
      
-     int interval = 1;
      int timespan = -1;
+     int printheader = 1;
      
-     const char *optstring="C:I:S:M:P:t:i:Z:h";
+     const char *optstring="C:I:S:M:P:t:i:Z:h:H";
 
      colors = bgy_scale;
      
@@ -534,11 +545,16 @@ int main(int argc,char *argv[])
 	  case 't':
 	       timespan = atoi(optarg);
 	       break;
+	  case 'H':
+	       printheader = 0;
+	       break;
 	  case 'i':
 	       interval = atoi(optarg);
 	       break;
 	  case 'Z':
 	       // default is bgy
+	       if (strncmp(optarg,"cpu",3) == 0) colors=cpu_temp_scale;
+	       if (strncmp(optarg,"cpui",4) == 0) colors=cpui_temp_scale;
 	       if (strncmp(optarg,"red",3) == 0) colors=red_temp_scale;
 	       if (strncmp(optarg,"rbw",3) == 0) colors=rbw_scale;
 	       if (strncmp(optarg,"mono",4) == 0) colors=mono_scale;
@@ -595,9 +611,9 @@ int main(int argc,char *argv[])
 	  }
 	  display_metric_heatmap(now,interval_count);
 	  advance_metrics();
-	  sleep(interval);
+	  usleep(interval*1000);
 	  interval_count ++;
-	  if ((interval_count % 60)==0) print_header();
+	  if (printheader && (interval_count % 60)==0) print_header();
 	  now  = time(NULL);
      }
      return 0;

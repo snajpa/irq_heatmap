@@ -62,15 +62,6 @@ struct bitmask *irqnuma_sysfs_cpustring(char *path)
      return b;
 }
      
-int irqnuma_get_packageid(int cpuid)
-{
-     char *format = "/sys/devices/system/cpu/cpu%d/topology/physical_package_id";
-     char file[IRQ_PATH_MAX];
-     
-     sprintf(file,format,cpuid);
-     return irqnuma_sysfs_integer(file);
-}
-
 int irqnuma_get_coreid(int cpuid)
 {
      char *format = "/sys/devices/system/cpu/cpu%d/topology/core_id";
@@ -154,12 +145,12 @@ void irqnuma_init_topology()
      memset((void *)&topology,0,sizeof(struct numa_topology));
      
      // number of sockets 
-     topology.number_of_sockets = numa_max_node()+1;
+     topology.number_of_sockets = numa_num_configured_nodes();
      if (topology.number_of_sockets >= MAX_SOCKETS) {
 	  fprintf(stderr,"bug: recompile with increased max sockets. current max_sockets = %d, numalib says you have %d\n",MAX_SOCKETS,topology.number_of_sockets);
 	  exit(-1);
      }
-     
+
      // number of 'cpus'
      topology.number_of_cpus = numa_num_configured_cpus(); // includes disabled cpus. 
 
@@ -170,11 +161,11 @@ void irqnuma_init_topology()
      // and build our topology map. 
      for (i=0; i<topology.number_of_cpus; i++) {
 	  // we need the socket physical package id, core id and cpu id and ht number 
-	  int package_id = irqnuma_get_packageid(i); // could use numa_node_of_cpu ?? 
+	  int node_id = numa_node_of_cpu(i); // could use numa_node_of_cpu ?? 
 	  int core_id = irqnuma_get_coreid(i);
 	  int thread_id = irqnuma_get_threadid(i);
 	  // cpuid == i
-	  irqnuma_add_cpu_to_topology(i,package_id,core_id,thread_id);
+	  irqnuma_add_cpu_to_topology(i,node_id,core_id,thread_id);
      }
      return;
 }
@@ -223,7 +214,7 @@ int main (int argc, char *argv[])
      fprintf(stderr,"duration of a clock tick (jiffy) %d ms\n",irqnuma_get_clocktick_ms());
      fprintf(stderr,"Table Dump\ncpuid\tpackage\tcore\ttid\n");
      for (i=0;i<cpu_count;i++) {
-	  fprintf(stderr,"%d\t%d\t%d\t%d\n",i,irqnuma_get_packageid(i),irqnuma_get_coreid(i),irqnuma_get_threadid(i));
+	  fprintf(stderr,"%d\t%d\t%d\t%d\n",i,numa_node_of_cpu(i),irqnuma_get_coreid(i),irqnuma_get_threadid(i));
      }
      
      irqnuma_init_topology();

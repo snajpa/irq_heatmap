@@ -11,9 +11,9 @@
 // hierarchy = sockets have hyperthreads have cores. 
 // The last two are inverted from the normal sense of thinking about it, but 
 // it helps as that's the way we display it - following numactl --hardware 
-#define MAX_SOCKETS 4
+#define MAX_SOCKETS 128
 #define MAX_THREADS 4
-#define MAX_CORES 64
+#define MAX_CORES 256
  
 struct core_desc_struct {
      int configured; 
