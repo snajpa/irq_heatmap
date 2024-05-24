@@ -61,7 +61,16 @@ struct bitmask *irqnuma_sysfs_cpustring(char *path)
      close(fd);
      return b;
 }
+
+int irqnuma_core_online(int cpuid)
+{
+     char *format = "/sys/devices/system/cpu/cpu%d/online";
+     char file[IRQ_PATH_MAX];
      
+     sprintf(file,format,cpuid);
+     return irqnuma_sysfs_integer(file);
+}
+
 int irqnuma_get_coreid(int cpuid)
 {
      char *format = "/sys/devices/system/cpu/cpu%d/topology/core_id";
@@ -161,6 +170,10 @@ void irqnuma_init_topology()
      // and build our topology map. 
      for (i=0; i<topology.number_of_cpus; i++) {
 	  // we need the socket physical package id, core id and cpu id and ht number 
+       int online = irqnuma_core_online(i);
+       if (!online) {
+         continue;
+       }
 	  int node_id = numa_node_of_cpu(i); // could use numa_node_of_cpu ?? 
 	  int core_id = irqnuma_get_coreid(i);
 	  int thread_id = irqnuma_get_threadid(i);

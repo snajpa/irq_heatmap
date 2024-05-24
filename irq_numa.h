@@ -48,6 +48,7 @@ int irqnuma_sysfs_integer(char *path);
 struct bitmask *irqnuma_sysfs_cpustring(char *path);
 int irqnuma_get_packageid(int cpuid);
 int irqnuma_get_coreid(int cpuid);
+int irqnuma_core_online(int cpuid);
 int irqnuma_get_threadid(int cpuid);
 void irqnuma_add_cpu_to_topology(int cpuid, int socket, int coreid, int thread_id);
 int irqnuma_get_clocktick_ms(void);
